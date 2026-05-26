@@ -86,6 +86,11 @@
 			"types": "./src/index.ts",
 			"import": "./src/index.ts"
 		},
+		"./mcp": null,
+		"./mcp/*": null,
+		"./runtime-mcp": null,
+		"./runtime-mcp/*": null,
+		"./commands/gjc-runtime-bridge": null,
 		"./*": {
 			"types": "./src/*.ts",
 			"import": "./src/*.ts"

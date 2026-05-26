@@ -13,6 +13,31 @@ import * as path from "node:path";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const EXPECTED_DEFINITIONS = ["deep-interview", "ralplan", "team", "ultragoal"] as const;
+const PUBLIC_DOC_FILES = ["README.md", "packages/coding-agent/README.md"] as const;
+const FORBIDDEN_PUBLIC_DOC_PATTERNS: readonly RegExp[] = [
+	/@oh-my-pi/u,
+	/oh-my-pi/u,
+	/pi-coding-agent/u,
+	/omp\.sh/u,
+	/qa\.omp\.sh/u,
+	/MCP/u,
+	/\/mcp/u,
+	/mcp-config/u,
+	/mcp-server/u,
+];
+const FORBIDDEN_SKILL_PATTERNS: readonly RegExp[] = [
+	/\bomx\s+(team|state|question|ultragoal|ralplan|deep-interview)/u,
+	/\$ralph/u,
+	/\$autopilot/u,
+	/\$autoresearch/u,
+	/\$autoresearch-goal/u,
+	/\$performance-goal/u,
+	/\$ultraqa/u,
+	/\$ultrawork/u,
+	/MCP/u,
+	/\/mcp/u,
+];
+const REQUIRED_PRIVATE_EXPORT_BLOCKS = ["./mcp", "./mcp/*", "./runtime-mcp", "./runtime-mcp/*", "./commands/gjc-runtime-bridge"] as const;
 const REQUIRED_LOCAL_TOOL_FILES = [
 	"packages/coding-agent/src/tools/read.ts",
 	"packages/coding-agent/src/tools/write.ts",
@@ -34,6 +59,7 @@ const results: GateResult[] = [];
 
 results.push(await verifyRebrandSurface());
 results.push(await verifyVisibleDefinitions());
+results.push(await verifyPublicDefinitionContent());
 results.push(await verifyMcpQuarantine());
 results.push(await verifyLocalToolsPreserved());
 results.push(await verifyRustBoundary());
@@ -115,12 +141,31 @@ async function verifyVisibleDefinitions(): Promise<GateResult> {
 	};
 }
 
+
+async function verifyPublicDefinitionContent(): Promise<GateResult> {
+	const findings: string[] = [];
+	for (const definition of EXPECTED_DEFINITIONS) {
+		const relativePath = `.omp/skills/${definition}/SKILL.md`;
+		const text = await readText(relativePath);
+		for (const pattern of FORBIDDEN_SKILL_PATTERNS) {
+			if (pattern.test(text)) findings.push(`${relativePath}: ${pattern.source}`);
+		}
+	}
+
+	return {
+		name: "approved public skill content",
+		passed: findings.length === 0,
+		details: [`forbidden public skill references: ${findings.join(", ") || "<none>"}`],
+	};
+}
+
 async function verifyMcpQuarantine(): Promise<GateResult> {
 	const codingPackage = await readJson("packages/coding-agent/package.json");
 	const exportsRecord = isRecord(codingPackage.exports) ? codingPackage.exports : {};
-	const mcpExportKeys = Object.keys(exportsRecord).filter(key => key === "./mcp" || key.startsWith("./mcp/"));
+	const mcpExportKeys = Object.keys(exportsRecord).filter(key => key === "./mcp" || key.startsWith("./mcp/") || key === "./runtime-mcp" || key.startsWith("./runtime-mcp/") || key === "./commands/gjc-runtime-bridge");
 	const exposedMcpKeys = mcpExportKeys.filter(key => exportsRecord[key] !== null);
 	const blockedMcpKeys = mcpExportKeys.filter(key => exportsRecord[key] === null);
+	const missingPrivateBlocks = REQUIRED_PRIVATE_EXPORT_BLOCKS.filter(key => exportsRecord[key] !== null);
 	const builtinRegistry = await readText("packages/coding-agent/src/slash-commands/builtin-registry.ts");
 	const acpBuiltins = await readText("packages/coding-agent/src/slash-commands/acp-builtins.ts");
 	const exposesMcpBuiltin = /name:\s*["']mcp["']/.test(builtinRegistry);
@@ -128,32 +173,55 @@ async function verifyMcpQuarantine(): Promise<GateResult> {
 	const acpReferencesMcpHandler = acpBuiltins.includes("handleMcpAcp");
 	const acpAdvertisesMcpCommand = /name:\s*["']mcp["']/.test(acpBuiltins);
 	const internalMcpPaths = [
-		"packages/coding-agent/src/mcp",
-		"packages/coding-agent/src/modes/controllers/mcp-command-controller.ts",
-		"packages/coding-agent/src/modes/components/mcp-add-wizard.ts",
-		"packages/coding-agent/src/mcp/discoverable-tool-metadata.ts",
+		"packages/coding-agent/src/runtime-mcp",
+		"packages/coding-agent/src/slash-commands/helpers/mcp.ts",
 	];
 	const presentInternalMcpPaths = internalMcpPaths.filter(relativePath => fs.existsSync(path.join(repoRoot, relativePath)));
+	const publicDocFindings = await findPublicDocFindings();
+	const removedPublicDocsStillPresent = [
+		"docs/mcp-config.md",
+		"docs/mcp-runtime-lifecycle.md",
+		"docs/mcp-server-tool-authoring.md",
+		"docs/mcp-protocol-transports.md",
+	].filter(relativePath => fs.existsSync(path.join(repoRoot, relativePath)));
 	const details = [
-		`exposed MCP package keys: ${exposedMcpKeys.join(", ") || "<none>"}`,
-		`blocked MCP package keys: ${blockedMcpKeys.join(", ") || "<none>"}`,
+		`exposed private package keys: ${exposedMcpKeys.join(", ") || "<none>"}`,
+		`blocked private package keys: ${blockedMcpKeys.join(", ") || "<none>"}`,
+		`missing private export blocks: ${missingPrivateBlocks.join(", ") || "<none>"}`,
 		`default /mcp builtin registered: ${exposesMcpBuiltin}`,
 		`default /mcp handler imported: ${importsMcpBuiltinHandler}`,
 		`ACP /mcp command advertised: ${acpAdvertisesMcpCommand}`,
 		`ACP MCP handler referenced: ${acpReferencesMcpHandler}`,
 		`private MCP implementation paths retained: ${presentInternalMcpPaths.join(", ") || "<none>"}`,
+		`public doc findings: ${publicDocFindings.join(", ") || "<none>"}`,
+		`removed public MCP docs still present: ${removedPublicDocsStillPresent.join(", ") || "<none>"}`,
 	];
 
 	return {
 		name: "MCP quarantine/no default discoverable MCP",
 		passed:
 			exposedMcpKeys.length === 0 &&
+			missingPrivateBlocks.length === 0 &&
+			publicDocFindings.length === 0 &&
+			removedPublicDocsStillPresent.length === 0 &&
 			!exposesMcpBuiltin &&
 			!importsMcpBuiltinHandler &&
 			!acpAdvertisesMcpCommand &&
 			!acpReferencesMcpHandler,
 		details,
 	};
+}
+
+
+async function findPublicDocFindings(): Promise<string[]> {
+	const findings: string[] = [];
+	for (const relativePath of PUBLIC_DOC_FILES) {
+		const text = await readText(relativePath);
+		for (const pattern of FORBIDDEN_PUBLIC_DOC_PATTERNS) {
+			if (pattern.test(text)) findings.push(`${relativePath}: ${pattern.source}`);
+		}
+	}
+	return findings;
 }
 
 async function verifyLocalToolsPreserved(): Promise<GateResult> {

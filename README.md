@@ -430,7 +430,7 @@ An extension is a TypeScript module. Same tool API, same slash-command registry,
 
 ### Discovery
 
-On first run gjc inherits whatever is already on disk: rules, skills, and MCP servers from `.claude`, `.cursor`, `.windsurf`, `.gemini`, `.codex`, `.cline`, `.github/copilot`, and `.vscode`. No migration script.
+On first run gjc inherits local rules and skills from supported workspace directories while keeping the shipped surface focused on inline/local tools. No migration script.
 
 ### Extensibility
 
