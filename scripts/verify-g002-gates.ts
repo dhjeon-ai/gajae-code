@@ -32,6 +32,7 @@ const FORBIDDEN_EXA_MCP_DOC_PATTERNS: readonly RegExp[] = [
 	/without EXA_API_KEY/u,
 	/fall(?:s| back)? to MCP/u,
 	/public MCP/u,
+	/\(or mcp\)/u,
 	/Exa search provider and Exa MCP/u,
 ];
 const FORBIDDEN_SKILL_PATTERNS: readonly RegExp[] = [
@@ -302,6 +303,7 @@ async function findExaMcpDocFindings(): Promise<string[]> {
 	const files = [
 		"docs/tools/web_search.md",
 		"docs/environment-variables.md",
+		"README.md",
 		"packages/coding-agent/src/internal-urls/docs-index.generated.ts",
 	] as const;
 	for (const relativePath of files) {

@@ -285,7 +285,7 @@ Fourteen backends. Pin one, or let `auto` walk the chain in order.
 | provider     | auth                   |
 | ------------ | ---------------------- |
 | `auto`       | chain                  |
-| `exa`        | `EXA_API_KEY` (or mcp) |
+| `exa`        | `EXA_API_KEY`          |
 | `brave`      | `BRAVE_API_KEY`        |
 | `jina`       | `JINA_API_KEY`         |
 | `kimi`       | `MOONSHOT_API_KEY`     |
