@@ -87,6 +87,7 @@ import { discoverAndLoadMCPTools, MCPManager, type MCPToolsLoadResult } from "./
 import {
 	collectDiscoverableMCPTools,
 	formatDiscoverableMCPToolServerSummary,
+	isMCPToolName,
 	selectDiscoverableMCPToolNamesByServer,
 } from "./mcp/discoverable-tool-metadata";
 import { resolveMemoryBackend } from "./memory-backend";
@@ -1686,8 +1687,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const initialRequestedActiveToolNames = options.toolNames
 			? requestedActiveToolNames
 			: requestedActiveToolNames.filter(name => !defaultInactiveToolNames.has(name));
+		const discoverableMCPToolNames = new Set(collectDiscoverableMCPTools(toolRegistry.values()).map(tool => tool.name));
 		const explicitlyRequestedMCPToolNames = options.toolNames
-			? requestedActiveToolNames.filter(name => name.startsWith("mcp__"))
+			? requestedActiveToolNames.filter(name => discoverableMCPToolNames.has(name))
 			: [];
 		const discoveryDefaultServers = new Set(
 			(settings.get("mcp.discoveryDefaultServers") ?? []).map(serverName => serverName.trim()).filter(Boolean),
@@ -1713,7 +1715,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				: [...new Set([...restoredSelectedMCPToolNames, ...defaultSelectedMCPToolNames])];
 			initialToolNames = [
 				...new Set([
-					...initialRequestedActiveToolNames.filter(name => !name.startsWith("mcp__")),
+					...initialRequestedActiveToolNames.filter(name => !discoverableMCPToolNames.has(name)),
 					...initialSelectedMCPToolNames,
 				]),
 			];
@@ -1725,7 +1727,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			...registeredTools.filter(t => !t.definition.defaultInactive).map(t => t.definition.name),
 		];
 		for (const name of alwaysInclude) {
-			if (mcpDiscoveryEnabled && name.startsWith("mcp__")) {
+			if (mcpDiscoveryEnabled && discoverableMCPToolNames.has(name)) {
 				continue;
 			}
 			if (toolRegistry.has(name) && !initialToolNames.includes(name)) {
